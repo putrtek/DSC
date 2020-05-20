@@ -1,0 +1,40 @@
+# Enabling HTTPS for PowerShell Remoting on a NON domain connected computer
+# https://www.petri.com/enabling-https-powershell-remoting-windows-server-2012-r2
+
+# Run on the remote server with admin privileges
+ 
+mkdir C:\temp
+$Cert = New-SelfSignedCertificate -CertstoreLocation Cert:\LocalMachine\My -DnsName dsc2016web -verbose
+Export-Certificate -Cert $Cert -FilePath C:\temp\dscweb -verbose
+
+
+# Copy the cert file to the local PC and run commands below with admin privileges
+ 
+Import-Certificate -Filepath 'C:\Users\putrt\Downloads\powershell\dscweb' -CertStoreLocation 'Cert:\LocalMachine\Root'  -verbose
+ 
+# Set up WinRM HTTPS listener on the remote server
+ 
+New-Item -Path WSMan:\LocalHost\Listener -Transport HTTPS -Address * -CertificateThumbPrint $Cert.Thumbprint –Force -verbose
+New-NetFirewallRule -DisplayName 'Windows Remote Management (HTTPS-In)' -Name 'Windows Remote Management (HTTPS-In)' -Profile Any -LocalPort 5986 -Protocol TCP
+ 
+ # Remove HTTP listener (optional) on Remote Server
+ 
+Winrm enumerate winrm/config/listener
+Get-ChildItem WSMan:\Localhost\listener | Where -Property Keys -eq 'Transport=HTTP' | Remove-Item -Recurse -verbose
+ 
+  Remove HTTPS listener on Remote Server IF needed
+ 
+Winrm enumerate winrm/config/listener
+Get-ChildItem WSMan:\Localhost\listener | Where -Property Keys -eq 'Transport=HTTPS' | Remove-Item -Recurse -verbose
+ 
+ 
+ 
+# Skip Certification Authority (CA) check
+ 
+$so = New-PsSessionOption –SkipCACheck
+ 
+# Establish a POSH Remoting session
+ 
+Enter-PSSession -Computername dsc2016web.adatum.com -Credential (Get-Credential adatum\administrator) -UseSSL -SessionOption $so
+$so = New-PsSessionOption –SkipCACheck
+Enter-PSSession -Computername dsc2016web -Credential (Get-Credential adatum\administrator) -UseSSL -SessionOption $so -verbose
